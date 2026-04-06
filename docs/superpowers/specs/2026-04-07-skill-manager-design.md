@@ -222,6 +222,35 @@ superpowers:design-shotgun, superpowers:canary, ui-ux-pro-max:ui-ux-pro-max, ...
 
 直接更新 `skill-profile.json`，无需重新完整分析。
 
+## 多语言支持
+
+插件所有面向用户的输出（提示信息、推荐理由、状态面板、配置文件中的 reason 字段等）需跟随用户的语言。
+
+### 语言检测策略
+
+Skill 文件（SKILL.md）中通过指令要求 Claude 检测用户语言并匹配输出：
+
+1. **优先级最高**：用户 CLAUDE.md 中的语言指令（如 `所有输出使用中文`）
+2. **其次**：用户当前会话的对话语言
+3. **兜底**：英文
+
+### 影响范围
+
+- **hook 输出**：session-start 脚本输出固定为英文（shell 脚本难以做语言检测），但保持极简，仅包含数字和 skill 名称，语言无关性强
+- **skill 交互输出**：由 Claude 生成，自然跟随用户语言
+- **配置文件**：`reason`、冲突说明等由 Claude 生成的字段，跟随用户当时使用的语言写入
+- **skill 名称**：保持原始英文标识符不变（如 `superpowers:brainstorming`），仅描述和理由部分跟随语言
+
+### 实现方式
+
+在每个 SKILL.md 的指令中加入：
+
+```
+所有面向用户的输出（推荐理由、状态描述、交互提示等）必须使用用户当前的对话语言。
+如果用户的 CLAUDE.md 中指定了语言偏好，以该偏好为准。
+Skill 标识符（如 superpowers:brainstorming）始终保持英文原名。
+```
+
 ## 错误处理
 
 ### 需要处理的场景
