@@ -1,0 +1,195 @@
+#!/usr/bin/env bash
+# SessionStart hook for skill-manager plugin
+# Counts installed skills, checks for .claude/skill-profile.json,
+# and injects disable directives or hints accordingly.
+
+set -euo pipefail
+
+INSTALLED_PLUGINS_FILE="${HOME}/.claude/plugins/installed_plugins.json"
+PROFILE_FILE="${PWD}/.claude/skill-profile.json"
+
+# ---------------------------------------------------------------------------
+# escape_for_json: escape a string for safe embedding in a JSON double-quoted
+# value. Uses bash parameter substitution (single C-level pass per replace).
+# ---------------------------------------------------------------------------
+escape_for_json() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/\\r}"
+    s="${s//$'\t'/\\t}"
+    printf '%s' "$s"
+}
+
+# ---------------------------------------------------------------------------
+# output_context: emit the final JSON for Claude Code or Cursor.
+# Claude Code and Cursor read different fields; only emit the right one.
+# ---------------------------------------------------------------------------
+output_context() {
+    local context="$1"
+    local escaped
+    escaped=$(escape_for_json "$context")
+
+    if [ -n "${CURSOR_PLUGIN_ROOT:-}" ]; then
+        printf '{\n  "additional_context": "%s"\n}\n' "$escaped"
+    elif [ -n "${CLAUDE_PLUGIN_ROOT:-}" ]; then
+        printf '{\n  "hookSpecificOutput": {\n    "hookEventName": "SessionStart",\n    "additionalContext": "%s"\n  }\n}\n' "$escaped"
+    else
+        printf '{\n  "additional_context": "%s"\n}\n' "$escaped"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Count all installed skills by walking every plugin's installPath.
+# Uses uv run python3 to parse JSON (available on macOS with uv).
+# ---------------------------------------------------------------------------
+count_skills_and_list() {
+    # Returns two lines: first line = total count, remaining = skill names
+    uv run python3 - "$INSTALLED_PLUGINS_FILE" <<'PYEOF'
+import sys, json, os, glob
+
+plugins_file = sys.argv[1]
+if not os.path.exists(plugins_file):
+    print(0)
+    sys.exit(0)
+
+with open(plugins_file) as f:
+    data = json.load(f)
+
+all_skills = []
+for plugin_key, installs in data.get('plugins', {}).items():
+    for install in installs:
+        install_path = install.get('installPath', '')
+        if not install_path:
+            continue
+        skill_mds = glob.glob(install_path + '/skills/*/SKILL.md')
+        for sm in skill_mds:
+            skill_name = os.path.basename(os.path.dirname(sm))
+            # Derive prefix from plugin.json name field
+            pjson_path = install_path + '/.claude-plugin/plugin.json'
+            prefix = ''
+            try:
+                with open(pjson_path) as pf:
+                    pdata = json.load(pf)
+                    prefix = pdata.get('name', '')
+            except Exception:
+                pass
+            full = f'{prefix}:{skill_name}' if prefix else skill_name
+            all_skills.append(full)
+
+print(len(all_skills))
+for s in sorted(all_skills):
+    print(s)
+PYEOF
+}
+
+# ---------------------------------------------------------------------------
+# Parse skill-profile.json with uv run python3.
+# Outputs: enabled_count disabled_count "skill1,skill2,..." for disabled list
+# ---------------------------------------------------------------------------
+parse_profile() {
+    local profile_file="$1"
+    uv run python3 - "$profile_file" <<'PYEOF'
+import sys, json
+
+profile_file = sys.argv[1]
+with open(profile_file) as f:
+    data = json.load(f)
+
+skills = data.get('skills', {})
+enabled = [k for k, v in skills.items() if v]
+disabled = [k for k, v in skills.items() if not v]
+
+print(len(enabled))
+print(len(disabled))
+print(','.join(sorted(disabled)))
+PYEOF
+}
+
+# ---------------------------------------------------------------------------
+# Main logic
+# ---------------------------------------------------------------------------
+
+# Gather skill list
+skill_output=$(count_skills_and_list 2>/dev/null || echo "0")
+total_skills=$(printf '%s' "$skill_output" | head -n1)
+# All skill names (one per line, skipping first count line)
+all_skill_names=$(printf '%s' "$skill_output" | tail -n +2)
+
+# Validate total_skills is a number; default to 0 on error
+if ! [[ "$total_skills" =~ ^[0-9]+$ ]]; then
+    total_skills=0
+fi
+
+# Determine scenario
+context=""
+
+if [ -f "$PROFILE_FILE" ]; then
+    # Profile exists — parse it
+    profile_parsed=$(parse_profile "$PROFILE_FILE" 2>/dev/null || echo "")
+
+    if [ -z "$profile_parsed" ]; then
+        # Profile unreadable — treat as no profile
+        if [ "$total_skills" -gt 10 ]; then
+            context="[skill-manager] You have ${total_skills} skills installed. Run /skill-manager to analyse and optimise which skills are active for this project."
+        fi
+    else
+        enabled_count=$(printf '%s' "$profile_parsed" | sed -n '1p')
+        disabled_count=$(printf '%s' "$profile_parsed" | sed -n '2p')
+        disabled_list=$(printf '%s' "$profile_parsed" | sed -n '3p')
+
+        # Collect skill names that are in installed set but not in profile
+        profile_skill_keys=$(uv run python3 - "$PROFILE_FILE" <<'PYEOF'
+import sys, json
+with open(sys.argv[1]) as f:
+    data = json.load(f)
+for k in sorted(data.get('skills', {}).keys()):
+    print(k)
+PYEOF
+        )
+
+        unmanaged=""
+        while IFS= read -r skill; do
+            [ -z "$skill" ] && continue
+            if ! printf '%s\n' "$profile_skill_keys" | grep -qxF "$skill"; then
+                if [ -z "$unmanaged" ]; then
+                    unmanaged="$skill"
+                else
+                    unmanaged="${unmanaged}, ${skill}"
+                fi
+            fi
+        done <<< "$all_skill_names"
+
+        total_in_profile=$(( enabled_count + disabled_count ))
+
+        if [ -n "$unmanaged" ]; then
+            # Scenario C: profile exists but new unmanaged skills found
+            context="[skill-manager] Skill profile loaded (${enabled_count}/${total_in_profile} skills enabled). New unmanaged skills detected: ${unmanaged}. Run /skill-manager to update your profile."
+        else
+            # Scenario B: profile exists and up to date
+            context="[skill-manager] Skill profile loaded: ${enabled_count}/${total_in_profile} skills enabled for this project."
+        fi
+
+        # Inject disable directive if any skills are disabled
+        if [ -n "$disabled_list" ] && [ "$disabled_count" -gt 0 ]; then
+            context="${context}
+
+[skill-manager] The following skills are DISABLED for this project. Do NOT use or suggest them:
+${disabled_list}"
+        fi
+    fi
+else
+    # No profile
+    if [ "$total_skills" -gt 10 ]; then
+        # Scenario A: no profile and many skills installed
+        context="[skill-manager] You have ${total_skills} skills installed but no skill profile for this project. Run /skill-manager to analyse and select the most relevant skills, reducing context overhead."
+    fi
+fi
+
+# Only emit output if there is something to say
+if [ -n "$context" ]; then
+    output_context "$context"
+fi
+
+exit 0
