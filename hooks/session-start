@@ -46,7 +46,7 @@ output_context() {
 # ---------------------------------------------------------------------------
 count_skills_and_list() {
     # Returns two lines: first line = total count, remaining = skill names
-    uv run python3 - "$INSTALLED_PLUGINS_FILE" <<'PYEOF'
+    python3 - "$INSTALLED_PLUGINS_FILE" <<'PYEOF'
 import sys, json, os, glob
 
 plugins_file = sys.argv[1]
@@ -90,20 +90,19 @@ PYEOF
 # ---------------------------------------------------------------------------
 parse_profile() {
     local profile_file="$1"
-    uv run python3 - "$profile_file" <<'PYEOF'
+    python3 - "$profile_file" <<'PYEOF'
 import sys, json
 
 profile_file = sys.argv[1]
 with open(profile_file) as f:
     data = json.load(f)
 
-skills = data.get('skills', {})
-enabled = [k for k, v in skills.items() if v]
-disabled = [k for k, v in skills.items() if not v]
+enabled = data.get('enabled', [])
+disabled = data.get('disabled', [])
 
 print(len(enabled))
 print(len(disabled))
-print(','.join(sorted(disabled)))
+print(', '.join(sorted(disabled)))
 PYEOF
 }
 
@@ -140,12 +139,12 @@ if [ -f "$PROFILE_FILE" ]; then
         disabled_list=$(printf '%s' "$profile_parsed" | sed -n '3p')
 
         # Collect skill names that are in installed set but not in profile
-        profile_skill_keys=$(uv run python3 - "$PROFILE_FILE" <<'PYEOF'
+        profile_skill_keys=$(python3 - "$PROFILE_FILE" <<'PYEOF'
 import sys, json
 with open(sys.argv[1]) as f:
     data = json.load(f)
-for k in sorted(data.get('skills', {}).keys()):
-    print(k)
+for s in data.get('enabled', []) + data.get('disabled', []):
+    print(s)
 PYEOF
         )
 
