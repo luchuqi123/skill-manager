@@ -1,15 +1,19 @@
 {
   "name": "skill-manager",
-  "description": "Skill management marketplace",
   "owner": {
     "name": "milan"
+  },
+  "metadata": {
+    "description": "Manage installed skills per-project: analyze, recommend, enable/disable to reduce context overhead",
+    "version": "0.1.0"
   },
   "plugins": [
     {
       "name": "skill-manager",
-      "description": "Manage installed skills per-project: analyze, recommend, enable/disable skills to reduce context overhead",
-      "version": "0.1.0",
-      "source": "./"
+      "source": "./",
+      "description": "Analyze project tech stack and recommend which skills to enable or disable. Resolve conflicts between similar skills. Reduce context overhead.",
+      "category": "productivity",
+      "tags": ["skills", "management", "optimization", "context", "productivity"]
     }
   ]
 }
