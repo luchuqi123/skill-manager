@@ -26,13 +26,13 @@ Skill Manager 通过创建项目级的 skill 配置文件来解决这个问题�
 /plugin install skill-manager@skill-manager
 ```
 
-**第三步：重新加载插件**
+**第三步：重新加载插件并重启**
 
 ```
 /reload-plugins
 ```
 
-完成！下次会话启动时，插件会自动检测已安装的 skill 数量，并建议运行 `/skill-manager` 进行优化。
+然后重启 Claude Code，使 SessionStart hook 生效。下次会话启动时，插件会自动检测已安装的 skill 数量，并建议运行 `/skill-manager` 进行优化。
 
 ## 使用方法
 

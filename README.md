@@ -26,13 +26,13 @@ Inside Claude Code, run the following commands:
 /plugin install skill-manager@skill-manager
 ```
 
-**Step 3: Reload plugins**
+**Step 3: Reload plugins and restart**
 
 ```
 /reload-plugins
 ```
 
-Done! On your next session start, the plugin will detect your installed skills and suggest running `/skill-manager` if optimization is available.
+Then restart Claude Code for the SessionStart hook to take effect. On your next session start, the plugin will detect your installed skills and suggest running `/skill-manager` if optimization is available.
 
 ## Usage
 
