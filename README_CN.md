@@ -17,7 +17,7 @@ Skill Manager 通过创建项目级的 skill 配置文件来解决这个问题�
 **第一步：添加市场**
 
 ```
-/plugin marketplace add milan/skill-manager
+/plugin marketplace add luchuqi123/skill-manager
 ```
 
 **第二步：安装插件**

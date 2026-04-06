@@ -1,7 +1,7 @@
 {
   "name": "skill-manager",
   "owner": {
-    "name": "milan"
+    "name": "luchuqi"
   },
   "metadata": {
     "description": "Manage installed skills per-project: analyze, recommend, enable/disable to reduce context overhead",
