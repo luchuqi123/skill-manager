@@ -1,0 +1,15 @@
+{
+  "name": "skill-manager",
+  "description": "Manage installed skills per-project: analyze, recommend, enable/disable skills to reduce context overhead",
+  "version": "0.1.0",
+  "author": {
+    "name": "milan"
+  },
+  "license": "MIT",
+  "keywords": [
+    "skills",
+    "management",
+    "optimization",
+    "context"
+  ]
+}
