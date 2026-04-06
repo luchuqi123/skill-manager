@@ -108,6 +108,10 @@ Skill Manager 通过创建项目级的 skill 配置文件来解决这个问题�
 /skill-toggle swap frontend-design:frontend-design ui-ux-pro-max:ui-ux-pro-max
 ```
 
+- **enable** — 为当前项目启用一个已禁用的 skill
+- **disable** — 为当前项目禁用一个已启用的 skill
+- **swap** — 一步完成两个冲突 skill 的互换。例如之前分析时选择了 `frontend-design` 而禁用了 `ui-ux-pro-max`，用 `swap` 可以直接反转这个选择，无需重新运行 `/skill-manager`
+
 ## 工作原理
 
 ```

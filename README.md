@@ -108,6 +108,10 @@ Manage individual skills without a full re-analysis:
 /skill-toggle swap frontend-design:frontend-design ui-ux-pro-max:ui-ux-pro-max
 ```
 
+- **enable** — Activate a disabled skill for the current project
+- **disable** — Deactivate an enabled skill for the current project
+- **swap** — Switch between two conflicting skills in one step. For example, if you previously chose `frontend-design` over `ui-ux-pro-max` during analysis, `swap` lets you reverse that choice without re-running `/skill-manager`
+
 ## How It Works
 
 ```
