@@ -120,9 +120,20 @@ For each L2 plugin:
 
 1. Get the plugin's `installPath` from `~/.claude/plugins/installed_plugins.json`.
 2. For each **enabled** skill in that plugin, create a directory symlink:
+
+   **macOS / Linux / WSL:**
    ```bash
    ln -sfn <installPath>/skills/<skill-name> .claude/skills/<skill-name>
    ```
+
+   **Windows (native, not WSL):**
+   ```cmd
+   mklink /D .claude\skills\<skill-name> <installPath>\skills\<skill-name>
+   ```
+   Note: On Windows, `mklink /D` may require administrator privileges or Developer Mode enabled. If symlinks fail, fall back to **directory junction** (`mklink /J`) which does not require elevated privileges.
+
+   **Cross-platform detection:** Check the OS by reading the platform. If `os.name == 'nt'` or `COMSPEC` is set, use Windows commands. Otherwise use Unix `ln -sfn`.
+
 3. For each **disabled** skill, ensure NO symlink exists in `.claude/skills/` (remove if present).
 
 **Example**: Plugin `superpowers` has 20 skills, you only need `brainstorming` and `writing-plans`:

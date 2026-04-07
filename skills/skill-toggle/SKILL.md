@@ -32,10 +32,9 @@ This skill is invoked as `/skill-toggle <action> <args>`.
 8. Write the updated profile (and settings if level changed).
 9. Confirm with appropriate message. If level changed, note that restart is needed.
 
-**Creating a symlink**:
-```bash
-ln -sfn <installPath>/skills/<skill-name> .claude/skills/<skill-name>
-```
+**Creating a symlink** (cross-platform):
+- macOS / Linux / WSL: `ln -sfn <installPath>/skills/<skill-name> .claude/skills/<skill-name>`
+- Windows native: `mklink /J .claude\skills\<skill-name> <installPath>\skills\<skill-name>` (junction, no admin needed)
 
 ### Disable
 
@@ -53,11 +52,10 @@ ln -sfn <installPath>/skills/<skill-name> .claude/skills/<skill-name>
 7. Write the updated profile and settings.
 8. Confirm with appropriate message.
 
-**Removing a symlink**:
-```bash
-rm -f .claude/skills/<skill-name>
-```
-Only remove if it is a symlink (check with `test -L`). Never delete a real directory.
+**Removing a symlink** (cross-platform):
+- macOS / Linux / WSL: `rm -f .claude/skills/<skill-name>` (only if `test -L` confirms it's a symlink)
+- Windows native: `rmdir .claude\skills\<skill-name>` (junctions are removed with rmdir, not del)
+- Never delete a real directory. Always verify it is a symlink/junction first.
 
 ### Swap
 

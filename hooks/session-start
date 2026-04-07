@@ -2,6 +2,11 @@
 # SessionStart hook for skill-manager plugin
 # Counts installed skills, checks for .claude/skill-profile.json,
 # and injects disable directives or hints accordingly.
+#
+# Platform support:
+# - macOS / Linux: runs natively
+# - Windows: runs via Git Bash (bundled with Claude Code) or WSL
+#   Git Bash translates Unix paths automatically, so $HOME and $PWD work.
 
 set -euo pipefail
 
