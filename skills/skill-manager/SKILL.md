@@ -100,44 +100,76 @@ For conflict groups:
 
 ### Phase 5: Write Configuration
 
-After all domains are confirmed, write TWO configuration files:
+After all domains are confirmed, apply the **three-level optimization** and write configuration files.
 
-#### 5a. Plugin-level disabling (`.claude/settings.local.json`)
+#### Three-level strategy
 
-This is the **primary mechanism** that actually reduces context overhead. For each installed plugin, check if ALL of its skills are in the disabled list. If so, disable the entire plugin via `enabledPlugins`.
+For each plugin, determine which level to apply:
 
-1. Read the existing `.claude/settings.local.json` (or create it).
-2. For each plugin, count how many of its skills are enabled vs disabled.
-3. If a plugin has **zero enabled skills**, set `"pluginKey": false` in `enabledPlugins`.
-4. If a plugin has **any enabled skills**, remove its entry from `enabledPlugins` (if present) so it inherits the global default. Do NOT write `true` — that could override a user's intentional global `false`.
-5. **NEVER disable `skill-manager@skill-manager`** — the manager itself must always stay enabled.
-6. Write the updated settings file, preserving all existing fields (permissions, env, etc.).
+| Level | Condition | Action | Context effect |
+|-------|-----------|--------|----------------|
+| **L1** | ALL skills in plugin are disabled | `enabledPlugins: false` | All descriptions removed |
+| **L2** | SOME skills needed, some not | `enabledPlugins: false` + symlink needed skills to `.claude/skills/` | Only needed skills in context |
+| **L3** | ALL skills are needed | Keep plugin enabled (no entry in `enabledPlugins`) | All descriptions in context |
 
-Example result in `.claude/settings.local.json`:
-```json
-{
-  "permissions": { "...existing..." },
-  "enabledPlugins": {
-    "frontend-design@claude-plugins-official": false,
-    "ui-ux-pro-max@ui-ux-pro-max-skill": false
-  }
-}
+**L2 is the key innovation.** By disabling the plugin AND symlinking only the needed skills into the project's `.claude/skills/` directory, Claude Code discovers them as local skills. Their descriptions enter the context, but the rest of the plugin's skills do not.
+
+#### 5a. Create symlinks for L2 plugins (`.claude/skills/`)
+
+For each L2 plugin:
+
+1. Get the plugin's `installPath` from `~/.claude/plugins/installed_plugins.json`.
+2. For each **enabled** skill in that plugin, create a directory symlink:
+   ```bash
+   ln -sfn <installPath>/skills/<skill-name> .claude/skills/<skill-name>
+   ```
+3. For each **disabled** skill, ensure NO symlink exists in `.claude/skills/` (remove if present).
+
+**Example**: Plugin `superpowers` has 20 skills, you only need `brainstorming` and `writing-plans`:
+```
+.claude/skills/brainstorming → ~/.claude/plugins/cache/.../superpowers/.../skills/brainstorming
+.claude/skills/writing-plans → ~/.claude/plugins/cache/.../superpowers/.../skills/writing-plans
 ```
 
-**Important**: The plugin key format in `enabledPlugins` is `pluginName@marketplaceName` (e.g. `superpowers@claude-plugins-official`). Read `~/.claude/plugins/installed_plugins.json` to get the exact keys — they are the top-level keys in the `plugins` object.
+**Naming note**: Symlinked skills lose their plugin prefix. `superpowers:brainstorming` becomes just `brainstorming` as a local skill. Inform the user of this in the output.
 
-#### 5b. Skill-level profile (`.claude/skill-profile.json`)
+**Safety rules**:
+- Only create symlinks for skills from L2 plugins. Do NOT symlink L3 plugin skills (they're already loaded via the plugin).
+- Never overwrite an existing non-symlink directory in `.claude/skills/` — warn the user if a name collision exists.
+- If two L2 plugins have skills with the same name, warn the user and ask which to keep.
 
-For plugins that remain enabled but have some skills disabled, write the fine-grained profile:
+#### 5b. Update `.claude/settings.local.json`
+
+1. Read the existing file (or create it).
+2. Set `enabledPlugins` entries:
+   - **L1 plugins**: `"pluginKey": false`
+   - **L2 plugins**: `"pluginKey": false` (plugin disabled, skills accessed via symlinks)
+   - **L3 plugins**: remove entry from `enabledPlugins` (inherit global default). Do NOT write `true`.
+3. **NEVER disable `skill-manager@skill-manager`**.
+4. Preserve all existing fields (permissions, env, etc.).
+
+**Important**: The plugin key format is `pluginName@marketplaceName` (e.g. `superpowers@claude-plugins-official`). Read `~/.claude/plugins/installed_plugins.json` for exact keys — they are the top-level keys in the `plugins` object.
+
+#### 5c. Write `.claude/skill-profile.json`
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "createdAt": "<ISO timestamp>",
   "updatedAt": "<ISO timestamp>",
   "enabled": ["plugin:skill", "..."],
   "disabled": ["plugin:skill", "..."],
-  "disabledPlugins": ["frontend-design@claude-plugins-official", "..."],
+  "pluginLevels": {
+    "superpowers@claude-plugins-official": "L2",
+    "frontend-design@claude-plugins-official": "L1",
+    "codex@openai-codex": "L3"
+  },
+  "symlinks": {
+    "brainstorming": {
+      "source": "superpowers:brainstorming",
+      "target": "~/.claude/plugins/cache/.../skills/brainstorming"
+    }
+  },
   "conflicts": {
     "<domain>": {
       "chosen": "plugin:skill",
@@ -152,26 +184,29 @@ For plugins that remain enabled but have some skills disabled, write the fine-gr
 }
 ```
 
-The `disabledPlugins` array records which plugins were fully disabled at the `enabledPlugins` level, so `/skill-status` and `/skill-toggle` can track them.
+- `pluginLevels`: records the optimization level per plugin
+- `symlinks`: records which local skills are symlinked from which plugin, so `/skill-status` and `/skill-toggle` can manage them
 
-Create the `.claude/` directory if it doesn't exist. Write both files using the Write tool.
-
-#### 5c. Confirm to user
-
-After writing, show a summary:
+#### 5d. Confirm to user
 
 ```
 Configuration saved:
 
-Plugin-level (context fully removed):
-  ❌ frontend-design@claude-plugins-official  (all 1 skills disabled)
-  ❌ ui-ux-pro-max@ui-ux-pro-max-skill       (all 1 skills disabled)
+L1 — Plugin fully disabled (context removed):
+  ❌ frontend-design@claude-plugins-official  (1 skill)
+  ❌ ui-ux-pro-max@ui-ux-pro-max-skill       (1 skill)
 
-Skill-level (soft disable via hook):
-  💤 superpowers:canary, superpowers:design-shotgun, ...
+L2 — Plugin disabled, needed skills symlinked (context optimized):
+  📌 superpowers@claude-plugins-official
+     Symlinked: brainstorming, writing-plans, systematic-debugging (3 skills)
+     Removed: canary, design-shotgun, ... (17 skills)
+     Note: These skills are now invoked as /brainstorming instead of /superpowers:brainstorming
 
-Enabled: X skills | Disabled: Y skills (Z via plugin-level, W via skill-level)
-Restart Claude Code for plugin-level changes to take effect.
+L3 — Plugin fully enabled:
+  ✅ codex@openai-codex (all 3 skills)
+
+Enabled: X skills | Context savings: Y skill descriptions removed
+Restart Claude Code for changes to take effect.
 ```
 
 ## Updating Existing Profile

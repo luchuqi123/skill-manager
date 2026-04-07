@@ -17,33 +17,27 @@ All user-facing output MUST use the user's current conversation language. If the
 
 2. **Scan installed skills** — Read `~/.claude/plugins/installed_plugins.json` and walk each plugin's `installPath` to build the full list of currently installed `plugin:skill` identifiers.
 
-3. **Read project settings** — Read `.claude/settings.local.json` to check which plugins are disabled at the `enabledPlugins` level. Also read the `disabledPlugins` array from the profile.
+3. **Read project settings** — Read `.claude/settings.local.json` for `enabledPlugins`. Read `pluginLevels` and `symlinks` from the profile.
 
-4. **Classify each skill** into one of five states:
-   - **Enabled**: in the profile's `enabled` list and currently installed
-   - **Disabled (plugin-level)**: belongs to a plugin disabled via `enabledPlugins` — context fully removed
-   - **Disabled (skill-level)**: in the profile's `disabled` list but plugin is still enabled — context present but Claude won't use it
-   - **Unmanaged**: currently installed but not in either list
-   - **Stale**: in the profile but no longer installed
+4. **Check symlinks** — Verify that symlinks in `.claude/skills/` recorded in the profile still exist and point to valid targets. Flag broken symlinks.
 
-5. **Output the status panel** in this format:
+5. **Classify and display** using the three-level structure:
 
 ```
 📋 Skill Profile Status (project: <project-name>)
 
-Enabled (<count>):
-  <plugin>:<skill>              <domain>
-  <plugin>:<skill>              <domain>
-  ...
+L3 — Plugin enabled, all skills active:
+  ✅ codex@openai-codex
+     codex:codex-rescue, codex:setup, codex:codex-cli-runtime
 
-Disabled — plugin-level (<count>):              ← context fully removed
-  ❌ frontend-design@claude-plugins-official     (1 skill)
-  ❌ ui-ux-pro-max@ui-ux-pro-max-skill          (1 skill)
+L2 — Plugin disabled, selected skills symlinked:
+  📌 superpowers@claude-plugins-official
+     Active (via symlink):  brainstorming, writing-plans, systematic-debugging
+     Removed from context:  canary, design-shotgun, design-consultation, ...
 
-Disabled — skill-level (<count>):               ← soft disable via hook
-  💤 superpowers:canary                          Deployment/Ops
-  💤 superpowers:design-shotgun                  Frontend/Design
-  ...
+L1 — Plugin fully disabled:
+  ❌ frontend-design@claude-plugins-official  (1 skill removed)
+  ❌ ui-ux-pro-max@ui-ux-pro-max-skill       (1 skill removed)
 
 Unmanaged (<count>):
   <plugin>:<skill>              <description snippet>
@@ -51,10 +45,11 @@ Unmanaged (<count>):
   → Run /skill-manager to include these in your profile.
 
 Stale (<count>):
-  <plugin>:<skill>              (plugin uninstalled)
+  <plugin>:<skill>              (plugin uninstalled or symlink broken)
   ...
   → Run /skill-manager to clean up.
 
+Summary: X skills active | Y removed from context | Z via symlink
 Last analyzed: <date>  Tech stack: <tech1>, <tech2>, ...
 ```
 

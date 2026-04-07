@@ -114,83 +114,93 @@ Skill Manager 通过创建项目级的 skill 配置文件来解决这个问题�
 
 ## 工作原理
 
-Skill Manager 使用**两层禁用机制**来最大化节省上下文：
+Skill Manager 使用**三层优化机制**来最大化节省上下文：
 
-| 层级 | 机制 | 效果 |
-|------|------|------|
-| **插件级** | `.claude/settings.local.json` 的 `enabledPlugins` | skill 描述**完全不加载**到上下文 |
-| **Skill 级** | `.claude/skill-profile.json` + SessionStart hook | 描述仍在上下文中，但 Claude 不会使用 |
+| 层级 | 条件 | 操作 | 上下文效果 |
+|------|------|------|----------|
+| **L1** | 插件所有 skill 都不需要 | `enabledPlugins: false` | 所有描述移除 |
+| **L2** | 插件部分 skill 需要 | `enabledPlugins: false` + 符号链接需要的 skill 到 `.claude/skills/` | **仅需要的 skill 进入上下文** |
+| **L3** | 插件所有 skill 都需要 | 保持插件启用 | 所有描述进入上下文 |
 
-`/skill-manager` 分析项目时会自动判断最优层级：
-- 如果某个插件的**所有 skill** 都不需要 → 禁用整个插件（插件级）
-- 如果某个插件的**部分 skill** 还需要 → 保留插件，禁用单个 skill（skill 级）
+**L2 是核心功能。** Claude Code 会从项目的 `.claude/skills/` 目录自动发现 skill。通过禁用插件并将需要的 skill 符号链接到该目录，实现了真正的 skill 级别过滤 —— 只有你实际使用的 skill 才会进入上下文。
 
 ```
 /skill-manager 分析项目
        │
-       ├── 插件内所有 skill 都禁用? ──► enabledPlugins: false
-       │                                (上下文完全移除)
+       ├── 所有 skill 都禁用?  ──► L1: enabledPlugins: false
+       │                           (上下文全部移除)
        │
-       └── 部分 skill 仍需要? ──► skill-profile.json
-                                   (通过 hook 软禁用)
+       ├── 部分 skill 需要?    ──► L2: enabledPlugins: false
+       │                           + 符号链接需要的 skill 到 .claude/skills/
+       │                           (仅需要的 skill 进入上下文)
+       │
+       └── 所有 skill 都需要?  ──► L3: 保持插件启用
+                                    (完整上下文)
 ```
 
-### 会话生命周期
+### 示例
 
-1. **插件加载** — Claude Code 读取 `.claude/settings.local.json`，跳过被禁用的插件。它们的 skill 描述完全不会进入上下文。
-2. **SessionStart hook** — 对于仍然启用的插件，hook 注入单个 skill 的禁用指令。
-3. **结果** — Claude 只看到与当前项目真正相关的 skill。
+你安装了 `superpowers`（20 个 skill），但只需要其中 3 个：
+
+```
+# 插件通过 enabledPlugins: false 禁用
+# 只有这 3 个 skill 进入上下文：
+.claude/skills/brainstorming  → ~/.claude/plugins/cache/.../superpowers/.../skills/brainstorming
+.claude/skills/writing-plans  → ~/.claude/plugins/cache/.../superpowers/.../skills/writing-plans
+.claude/skills/systematic-debugging → ~/.claude/plugins/cache/.../superpowers/.../skills/systematic-debugging
+```
+
+**结果**：17 个 skill 描述从上下文中移除。3 个需要的 skill 作为本地 skill 工作（通过 `/brainstorming` 调用，而不是 `/superpowers:brainstorming`）。
 
 ## 配置文件
 
-插件管理两个配置文件：
+插件管理三个配置：
 
 ### `.claude/settings.local.json` — 插件级控制
 
 ```json
 {
   "enabledPlugins": {
+    "superpowers@claude-plugins-official": false,
     "frontend-design@claude-plugins-official": false,
     "ui-ux-pro-max@ui-ux-pro-max-skill": false
   }
 }
 ```
 
-### `.claude/skill-profile.json` — Skill 级控制
+### `.claude/skills/` — 符号链接的 skill（L2）
+
+```
+.claude/skills/
+├── brainstorming → ~/.claude/plugins/cache/.../skills/brainstorming
+├── writing-plans → ~/.claude/plugins/cache/.../skills/writing-plans
+└── systematic-debugging → ~/.claude/plugins/cache/.../skills/systematic-debugging
+```
+
+### `.claude/skill-profile.json` — 配置元数据
 
 ```json
 {
-  "version": 1,
-  "createdAt": "2026-04-07T12:00:00.000Z",
-  "updatedAt": "2026-04-07T12:00:00.000Z",
-  "enabled": [
-    "superpowers:brainstorming",
-    "superpowers:writing-plans",
-    "superpowers:systematic-debugging"
-  ],
-  "disabled": [
-    "superpowers:design-shotgun",
-    "superpowers:canary"
-  ],
-  "disabledPlugins": [
-    "frontend-design@claude-plugins-official",
-    "ui-ux-pro-max@ui-ux-pro-max-skill"
-  ],
-  "conflicts": {
-    "前端设计": {
-      "chosen": null,
-      "over": ["frontend-design:frontend-design", "ui-ux-pro-max:ui-ux-pro-max"],
-      "reason": "纯后端项目，无前端代码"
+  "version": 2,
+  "enabled": ["superpowers:brainstorming", "superpowers:writing-plans"],
+  "disabled": ["superpowers:canary", "superpowers:design-shotgun"],
+  "pluginLevels": {
+    "superpowers@claude-plugins-official": "L2",
+    "frontend-design@claude-plugins-official": "L1",
+    "codex@openai-codex": "L3"
+  },
+  "symlinks": {
+    "brainstorming": {
+      "source": "superpowers:brainstorming",
+      "target": "~/.claude/plugins/cache/.../skills/brainstorming"
     }
   },
-  "projectContext": {
-    "techStack": ["typescript", "node", "express"],
-    "analyzedAt": "2026-04-07T12:00:00.000Z"
-  }
+  "conflicts": { "...": "..." },
+  "projectContext": { "techStack": ["typescript", "react"], "analyzedAt": "..." }
 }
 ```
 
-你可以把 `skill-profile.json` 提交到仓库，让团队成员共享相同的配置。注意 `settings.local.json` 通常被 gitignore（仅本地生效）。
+你可以把 `skill-profile.json` 提交到仓库，让团队成员共享。符号链接和 `settings.local.json` 仅本地生效。
 
 ## 多语言支持
 

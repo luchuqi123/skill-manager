@@ -99,12 +99,37 @@ with open(profile_file) as f:
 
 enabled = data.get('enabled', [])
 disabled = data.get('disabled', [])
-disabled_plugins = data.get('disabledPlugins', [])
+plugin_levels = data.get('pluginLevels', {})
+symlinks = data.get('symlinks', {})
+
+# Count plugins per level
+l1_count = sum(1 for v in plugin_levels.values() if v == 'L1')
+l2_count = sum(1 for v in plugin_levels.values() if v == 'L2')
+symlink_count = len(symlinks)
+
+# Skills that still need soft-disable via hook:
+# Only L3 plugin skills that are in the disabled list.
+# L1/L2 plugin skills are already removed from context entirely.
+l1_l2_plugins = {k for k, v in plugin_levels.items() if v in ('L1', 'L2')}
+soft_disabled = []
+for s in sorted(disabled):
+    # Check if skill's plugin is L1/L2 (already context-removed)
+    plugin_part = s.split(':')[0] if ':' in s else ''
+    # Match against plugin keys (plugin_name@marketplace → plugin_name)
+    is_context_removed = False
+    for pk in l1_l2_plugins:
+        if pk.split('@')[0] == plugin_part:
+            is_context_removed = True
+            break
+    if not is_context_removed:
+        soft_disabled.append(s)
 
 print(len(enabled))
 print(len(disabled))
-print(len(disabled_plugins))
-print(', '.join(sorted(disabled)))
+print(l1_count)
+print(l2_count)
+print(symlink_count)
+print(', '.join(soft_disabled))
 PYEOF
 }
 
@@ -138,8 +163,10 @@ if [ -f "$PROFILE_FILE" ]; then
     else
         enabled_count=$(printf '%s' "$profile_parsed" | sed -n '1p')
         disabled_count=$(printf '%s' "$profile_parsed" | sed -n '2p')
-        disabled_plugins_count=$(printf '%s' "$profile_parsed" | sed -n '3p')
-        disabled_list=$(printf '%s' "$profile_parsed" | sed -n '4p')
+        l1_count=$(printf '%s' "$profile_parsed" | sed -n '3p')
+        l2_count=$(printf '%s' "$profile_parsed" | sed -n '4p')
+        symlink_count=$(printf '%s' "$profile_parsed" | sed -n '5p')
+        soft_disabled_list=$(printf '%s' "$profile_parsed" | sed -n '6p')
 
         # Collect skill names that are in installed set but not in profile
         profile_skill_keys=$(python3 - "$PROFILE_FILE" <<'PYEOF'
@@ -166,25 +193,26 @@ PYEOF
         total_in_profile=$(( enabled_count + disabled_count ))
 
         # Build status line
-        plugin_note=""
-        if [ "$disabled_plugins_count" -gt 0 ]; then
-            plugin_note=" (${disabled_plugins_count} plugin(s) fully disabled)"
+        context_note=""
+        if [ "$l1_count" -gt 0 ] || [ "$l2_count" -gt 0 ]; then
+            context_note=" (L1:${l1_count} L2:${l2_count} plugins optimized, ${symlink_count} skills via symlink)"
         fi
 
         if [ -n "$unmanaged" ]; then
             # Scenario C: profile exists but new unmanaged skills found
-            context="[skill-manager] Skill profile loaded (${enabled_count}/${total_in_profile} skills enabled${plugin_note}). New unmanaged skills detected: ${unmanaged}. Run /skill-manager to update your profile."
+            context="[skill-manager] Skill profile active (${enabled_count}/${total_in_profile} skills enabled${context_note}). New unmanaged skills detected: ${unmanaged}. Run /skill-manager to update."
         else
             # Scenario B: profile exists and up to date
-            context="[skill-manager] Skill profile loaded: ${enabled_count}/${total_in_profile} skills enabled${plugin_note}."
+            context="[skill-manager] Skill profile active: ${enabled_count}/${total_in_profile} skills enabled${context_note}."
         fi
 
-        # Inject disable directive if any skills are disabled
-        if [ -n "$disabled_list" ] && [ "$disabled_count" -gt 0 ]; then
+        # Inject soft-disable directive ONLY for L3 plugin skills that are disabled
+        # (L1/L2 plugin skills are already removed from context via enabledPlugins + symlinks)
+        if [ -n "$soft_disabled_list" ]; then
             context="${context}
 
 [skill-manager] The following skills are DISABLED for this project. Do NOT use or suggest them:
-${disabled_list}"
+${soft_disabled_list}"
         fi
     fi
 else

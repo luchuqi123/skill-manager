@@ -114,83 +114,93 @@ Manage individual skills without a full re-analysis:
 
 ## How It Works
 
-Skill Manager uses a **two-level disable mechanism** to maximize context savings:
+Skill Manager uses a **three-level optimization** to maximize context savings:
 
-| Level | Mechanism | Effect |
-|-------|-----------|--------|
-| **Plugin-level** | `.claude/settings.local.json` `enabledPlugins` | Skill descriptions **completely removed** from context |
-| **Skill-level** | `.claude/skill-profile.json` + SessionStart hook | Descriptions still in context, but Claude won't use them |
+| Level | Condition | Action | Context effect |
+|-------|-----------|--------|----------------|
+| **L1** | All skills in plugin disabled | `enabledPlugins: false` | All descriptions removed |
+| **L2** | Some skills needed | `enabledPlugins: false` + symlink needed skills to `.claude/skills/` | **Only needed skills in context** |
+| **L3** | All skills needed | Keep plugin enabled | All descriptions in context |
 
-When `/skill-manager` analyzes your project, it automatically determines the optimal level:
-- If **all skills** in a plugin are irrelevant → disable the entire plugin (plugin-level)
-- If **some skills** in a plugin are needed → keep plugin enabled, disable individual skills (skill-level)
+**L2 is the key feature.** Claude Code discovers skills from the project's `.claude/skills/` directory. By disabling a plugin and symlinking only the needed skills into that directory, we achieve true skill-level filtering — only the skills you actually use enter the context.
 
 ```
 /skill-manager analyzes project
        │
-       ├── All skills in plugin disabled? ──► enabledPlugins: false
-       │                                      (context fully removed)
+       ├── All skills disabled?  ──► L1: enabledPlugins: false
+       │                              (all context removed)
        │
-       └── Some skills still needed? ──► skill-profile.json
-                                          (soft disable via hook)
+       ├── Some skills needed?   ──► L2: enabledPlugins: false
+       │                              + symlink needed skills to .claude/skills/
+       │                              (only needed skills in context)
+       │
+       └── All skills needed?    ──► L3: plugin stays enabled
+                                      (full context)
 ```
 
-### Session lifecycle
+### Example
 
-1. **Plugin loading** — Claude Code reads `.claude/settings.local.json` and skips disabled plugins entirely. Their skill descriptions never enter the context.
-2. **SessionStart hook** — For plugins that remain enabled, the hook injects disable directives for individual skills.
-3. **Result** — Claude only sees skills that are actually relevant to your project.
+You have `superpowers` (20 skills) but only need 3:
+
+```
+# Plugin disabled via enabledPlugins: false
+# Only these 3 skills enter the context:
+.claude/skills/brainstorming  → ~/.claude/plugins/cache/.../superpowers/.../skills/brainstorming
+.claude/skills/writing-plans  → ~/.claude/plugins/cache/.../superpowers/.../skills/writing-plans
+.claude/skills/systematic-debugging → ~/.claude/plugins/cache/.../superpowers/.../skills/systematic-debugging
+```
+
+**Result**: 17 skill descriptions removed from context. The 3 needed skills work as local skills (invoked as `/brainstorming` instead of `/superpowers:brainstorming`).
 
 ## Configuration
 
-Two files are managed by the plugin:
+Three files are managed by the plugin:
 
 ### `.claude/settings.local.json` — Plugin-level control
 
 ```json
 {
   "enabledPlugins": {
+    "superpowers@claude-plugins-official": false,
     "frontend-design@claude-plugins-official": false,
     "ui-ux-pro-max@ui-ux-pro-max-skill": false
   }
 }
 ```
 
-### `.claude/skill-profile.json` — Skill-level control
+### `.claude/skills/` — Symlinked skills (L2)
+
+```
+.claude/skills/
+├── brainstorming → ~/.claude/plugins/cache/.../skills/brainstorming
+├── writing-plans → ~/.claude/plugins/cache/.../skills/writing-plans
+└── systematic-debugging → ~/.claude/plugins/cache/.../skills/systematic-debugging
+```
+
+### `.claude/skill-profile.json` — Profile metadata
 
 ```json
 {
-  "version": 1,
-  "createdAt": "2026-04-07T12:00:00.000Z",
-  "updatedAt": "2026-04-07T12:00:00.000Z",
-  "enabled": [
-    "superpowers:brainstorming",
-    "superpowers:writing-plans",
-    "superpowers:systematic-debugging"
-  ],
-  "disabled": [
-    "superpowers:design-shotgun",
-    "superpowers:canary"
-  ],
-  "disabledPlugins": [
-    "frontend-design@claude-plugins-official",
-    "ui-ux-pro-max@ui-ux-pro-max-skill"
-  ],
-  "conflicts": {
-    "Frontend/Design": {
-      "chosen": null,
-      "over": ["frontend-design:frontend-design", "ui-ux-pro-max:ui-ux-pro-max"],
-      "reason": "Pure backend project, no frontend code"
+  "version": 2,
+  "enabled": ["superpowers:brainstorming", "superpowers:writing-plans"],
+  "disabled": ["superpowers:canary", "superpowers:design-shotgun"],
+  "pluginLevels": {
+    "superpowers@claude-plugins-official": "L2",
+    "frontend-design@claude-plugins-official": "L1",
+    "codex@openai-codex": "L3"
+  },
+  "symlinks": {
+    "brainstorming": {
+      "source": "superpowers:brainstorming",
+      "target": "~/.claude/plugins/cache/.../skills/brainstorming"
     }
   },
-  "projectContext": {
-    "techStack": ["typescript", "node", "express"],
-    "analyzedAt": "2026-04-07T12:00:00.000Z"
-  }
+  "conflicts": { "...": "..." },
+  "projectContext": { "techStack": ["typescript", "react"], "analyzedAt": "..." }
 }
 ```
 
-You can commit `skill-profile.json` to your repo so teammates share the same profile. Note that `settings.local.json` is typically gitignored (local only).
+You can commit `skill-profile.json` to your repo so teammates share the same profile. Symlinks and `settings.local.json` are local only.
 
 ## Multilingual
 

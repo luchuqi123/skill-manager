@@ -23,11 +23,19 @@ This skill is invoked as `/skill-toggle <action> <args>`.
 2. Verify the skill identifier exists in the installed plugins (check `~/.claude/plugins/installed_plugins.json` and walk the install path).
 3. Move the skill from `disabled` to `enabled` in the profile.
 4. If the skill was not in either list (unmanaged), add it to `enabled`.
-5. **Plugin re-enable check**: If the skill's parent plugin is currently disabled in `.claude/settings.local.json` `enabledPlugins`, remove the `false` entry (do NOT write `true` — let it inherit the global default). Also remove the plugin from the profile's `disabledPlugins` array.
-6. Update `updatedAt` timestamp.
-7. Write the updated profile and settings.
-8. If the plugin was re-enabled: `✅ Enabled <plugin:skill>. Plugin <plugin@marketplace> was re-enabled. Restart Claude Code for full effect.`
-9. Otherwise: `✅ Enabled <plugin:skill>. Takes effect next session.`
+5. **Symlink handling**: Check the plugin's current level in `pluginLevels`:
+   - If **L1** (plugin fully disabled, no skills needed until now): Change to **L2**. Create a symlink for this skill in `.claude/skills/`. Keep `enabledPlugins: false`.
+   - If **L2** (plugin already has some symlinks): Create a symlink for this skill. If ALL skills are now enabled, upgrade to **L3**: remove all symlinks, remove `enabledPlugins: false` entry.
+   - If **L3**: No symlink needed, skill is already loaded via the plugin.
+6. Update `symlinks` in the profile to reflect the new symlink.
+7. Update `updatedAt` timestamp.
+8. Write the updated profile (and settings if level changed).
+9. Confirm with appropriate message. If level changed, note that restart is needed.
+
+**Creating a symlink**:
+```bash
+ln -sfn <installPath>/skills/<skill-name> .claude/skills/<skill-name>
+```
 
 ### Disable
 
@@ -36,11 +44,20 @@ This skill is invoked as `/skill-toggle <action> <args>`.
 1. Read `.claude/skill-profile.json`. If it doesn't exist, tell the user to run `/skill-manager` first.
 2. Move the skill from `enabled` to `disabled` in the profile.
 3. If the skill was not in either list, add it to `disabled`.
-4. **Plugin disable check**: After moving, check if the parent plugin now has zero enabled skills. If so, disable the entire plugin in `.claude/settings.local.json` `enabledPlugins` and add it to the profile's `disabledPlugins` array.
-5. Update `updatedAt` timestamp.
-6. Write the updated profile and settings.
-7. If the plugin was disabled: `💤 Disabled <plugin:skill>. Plugin <plugin@marketplace> fully disabled (context removed). Restart Claude Code for full effect.`
-8. Otherwise: `💤 Disabled <plugin:skill>. Takes effect next session.`
+4. **Symlink handling**: Check the plugin's current level:
+   - If **L3**: Change to **L2**. Disable plugin via `enabledPlugins: false`. Create symlinks for all REMAINING enabled skills from this plugin. The disabled skill gets no symlink.
+   - If **L2**: Remove this skill's symlink from `.claude/skills/`. If no symlinks remain, downgrade to **L1**.
+   - If **L1**: No action needed.
+5. Update `symlinks` in the profile.
+6. Update `updatedAt` timestamp.
+7. Write the updated profile and settings.
+8. Confirm with appropriate message.
+
+**Removing a symlink**:
+```bash
+rm -f .claude/skills/<skill-name>
+```
+Only remove if it is a symlink (check with `test -L`). Never delete a real directory.
 
 ### Swap
 
@@ -50,11 +67,11 @@ This skill is invoked as `/skill-toggle <action> <args>`.
 2. Verify both skills exist in installed plugins.
 3. Move `<current-skill>` from `enabled` to `disabled`.
 4. Move `<replacement-skill>` from `disabled` to `enabled`.
-5. **Plugin-level cascade**: If the swap causes a plugin to have zero enabled skills, disable it in `enabledPlugins`. If the replacement skill's plugin was disabled, re-enable it.
+5. **Symlink cascade**: Apply the enable/disable symlink logic for both skills. If they are from different plugins, each plugin's level may change independently. If from the same L2 plugin, remove the old symlink and create the new one.
 6. Update the `conflicts` section: set `chosen` to `<replacement-skill>`, add `<current-skill>` to `over`.
 7. Update `updatedAt` timestamp.
 8. Write the updated profile and settings.
-9. Confirm: `🔄 Swapped: <replacement-skill> (enabled) ↔ <current-skill> (disabled). Takes effect next session.` (Add restart note if any plugin-level changes occurred.)
+9. Confirm: `🔄 Swapped: <replacement-skill> (enabled) ↔ <current-skill> (disabled).` (Add restart note if any plugin-level changes occurred.)
 
 ## Error Handling
 
