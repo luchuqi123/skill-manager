@@ -23,9 +23,11 @@ This skill is invoked as `/skill-toggle <action> <args>`.
 2. Verify the skill identifier exists in the installed plugins (check `~/.claude/plugins/installed_plugins.json` and walk the install path).
 3. Move the skill from `disabled` to `enabled` in the profile.
 4. If the skill was not in either list (unmanaged), add it to `enabled`.
-5. Update `updatedAt` timestamp.
-6. Write the updated profile.
-7. Confirm: `✅ Enabled <plugin:skill>. Takes effect next session.`
+5. **Plugin re-enable check**: If the skill's parent plugin is currently disabled in `.claude/settings.local.json` `enabledPlugins`, re-enable it (set to `true` or remove the entry). Also remove the plugin from the profile's `disabledPlugins` array.
+6. Update `updatedAt` timestamp.
+7. Write the updated profile and settings.
+8. If the plugin was re-enabled: `✅ Enabled <plugin:skill>. Plugin <plugin@marketplace> was re-enabled. Restart Claude Code for full effect.`
+9. Otherwise: `✅ Enabled <plugin:skill>. Takes effect next session.`
 
 ### Disable
 
@@ -34,9 +36,11 @@ This skill is invoked as `/skill-toggle <action> <args>`.
 1. Read `.claude/skill-profile.json`. If it doesn't exist, tell the user to run `/skill-manager` first.
 2. Move the skill from `enabled` to `disabled` in the profile.
 3. If the skill was not in either list, add it to `disabled`.
-4. Update `updatedAt` timestamp.
-5. Write the updated profile.
-6. Confirm: `💤 Disabled <plugin:skill>. Takes effect next session.`
+4. **Plugin disable check**: After moving, check if the parent plugin now has zero enabled skills. If so, disable the entire plugin in `.claude/settings.local.json` `enabledPlugins` and add it to the profile's `disabledPlugins` array.
+5. Update `updatedAt` timestamp.
+6. Write the updated profile and settings.
+7. If the plugin was disabled: `💤 Disabled <plugin:skill>. Plugin <plugin@marketplace> fully disabled (context removed). Restart Claude Code for full effect.`
+8. Otherwise: `💤 Disabled <plugin:skill>. Takes effect next session.`
 
 ### Swap
 
@@ -46,10 +50,11 @@ This skill is invoked as `/skill-toggle <action> <args>`.
 2. Verify both skills exist in installed plugins.
 3. Move `<current-skill>` from `enabled` to `disabled`.
 4. Move `<replacement-skill>` from `disabled` to `enabled`.
-5. Update the `conflicts` section: set `chosen` to `<replacement-skill>`, add `<current-skill>` to `over`.
-6. Update `updatedAt` timestamp.
-7. Write the updated profile.
-8. Confirm: `🔄 Swapped: <replacement-skill> (enabled) ↔ <current-skill> (disabled). Takes effect next session.`
+5. **Plugin-level cascade**: If the swap causes a plugin to have zero enabled skills, disable it in `enabledPlugins`. If the replacement skill's plugin was disabled, re-enable it.
+6. Update the `conflicts` section: set `chosen` to `<replacement-skill>`, add `<current-skill>` to `over`.
+7. Update `updatedAt` timestamp.
+8. Write the updated profile and settings.
+9. Confirm: `🔄 Swapped: <replacement-skill> (enabled) ↔ <current-skill> (disabled). Takes effect next session.` (Add restart note if any plugin-level changes occurred.)
 
 ## Error Handling
 

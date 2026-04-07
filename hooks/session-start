@@ -99,9 +99,11 @@ with open(profile_file) as f:
 
 enabled = data.get('enabled', [])
 disabled = data.get('disabled', [])
+disabled_plugins = data.get('disabledPlugins', [])
 
 print(len(enabled))
 print(len(disabled))
+print(len(disabled_plugins))
 print(', '.join(sorted(disabled)))
 PYEOF
 }
@@ -136,7 +138,8 @@ if [ -f "$PROFILE_FILE" ]; then
     else
         enabled_count=$(printf '%s' "$profile_parsed" | sed -n '1p')
         disabled_count=$(printf '%s' "$profile_parsed" | sed -n '2p')
-        disabled_list=$(printf '%s' "$profile_parsed" | sed -n '3p')
+        disabled_plugins_count=$(printf '%s' "$profile_parsed" | sed -n '3p')
+        disabled_list=$(printf '%s' "$profile_parsed" | sed -n '4p')
 
         # Collect skill names that are in installed set but not in profile
         profile_skill_keys=$(python3 - "$PROFILE_FILE" <<'PYEOF'
@@ -162,12 +165,18 @@ PYEOF
 
         total_in_profile=$(( enabled_count + disabled_count ))
 
+        # Build status line
+        plugin_note=""
+        if [ "$disabled_plugins_count" -gt 0 ]; then
+            plugin_note=" (${disabled_plugins_count} plugin(s) fully disabled)"
+        fi
+
         if [ -n "$unmanaged" ]; then
             # Scenario C: profile exists but new unmanaged skills found
-            context="[skill-manager] Skill profile loaded (${enabled_count}/${total_in_profile} skills enabled). New unmanaged skills detected: ${unmanaged}. Run /skill-manager to update your profile."
+            context="[skill-manager] Skill profile loaded (${enabled_count}/${total_in_profile} skills enabled${plugin_note}). New unmanaged skills detected: ${unmanaged}. Run /skill-manager to update your profile."
         else
             # Scenario B: profile exists and up to date
-            context="[skill-manager] Skill profile loaded: ${enabled_count}/${total_in_profile} skills enabled for this project."
+            context="[skill-manager] Skill profile loaded: ${enabled_count}/${total_in_profile} skills enabled${plugin_note}."
         fi
 
         # Inject disable directive if any skills are disabled

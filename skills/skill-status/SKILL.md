@@ -17,13 +17,16 @@ All user-facing output MUST use the user's current conversation language. If the
 
 2. **Scan installed skills** — Read `~/.claude/plugins/installed_plugins.json` and walk each plugin's `installPath` to build the full list of currently installed `plugin:skill` identifiers.
 
-3. **Classify each skill** into one of four states:
+3. **Read project settings** — Read `.claude/settings.local.json` to check which plugins are disabled at the `enabledPlugins` level. Also read the `disabledPlugins` array from the profile.
+
+4. **Classify each skill** into one of five states:
    - **Enabled**: in the profile's `enabled` list and currently installed
-   - **Disabled**: in the profile's `disabled` list and currently installed
+   - **Disabled (plugin-level)**: belongs to a plugin disabled via `enabledPlugins` — context fully removed
+   - **Disabled (skill-level)**: in the profile's `disabled` list but plugin is still enabled — context present but Claude won't use it
    - **Unmanaged**: currently installed but not in either list
    - **Stale**: in the profile but no longer installed
 
-4. **Output the status panel** in this format:
+5. **Output the status panel** in this format:
 
 ```
 📋 Skill Profile Status (project: <project-name>)
@@ -33,9 +36,13 @@ Enabled (<count>):
   <plugin>:<skill>              <domain>
   ...
 
-Disabled (<count>):
-  <plugin>:<skill>              <domain> (conflict: chose <other-skill>)
-  <plugin>:<skill>              <domain>
+Disabled — plugin-level (<count>):              ← context fully removed
+  ❌ frontend-design@claude-plugins-official     (1 skill)
+  ❌ ui-ux-pro-max@ui-ux-pro-max-skill          (1 skill)
+
+Disabled — skill-level (<count>):               ← soft disable via hook
+  💤 superpowers:canary                          Deployment/Ops
+  💤 superpowers:design-shotgun                  Frontend/Design
   ...
 
 Unmanaged (<count>):

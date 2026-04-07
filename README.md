@@ -114,26 +114,49 @@ Manage individual skills without a full re-analysis:
 
 ## How It Works
 
+Skill Manager uses a **two-level disable mechanism** to maximize context savings:
+
+| Level | Mechanism | Effect |
+|-------|-----------|--------|
+| **Plugin-level** | `.claude/settings.local.json` `enabledPlugins` | Skill descriptions **completely removed** from context |
+| **Skill-level** | `.claude/skill-profile.json` + SessionStart hook | Descriptions still in context, but Claude won't use them |
+
+When `/skill-manager` analyzes your project, it automatically determines the optimal level:
+- If **all skills** in a plugin are irrelevant → disable the entire plugin (plugin-level)
+- If **some skills** in a plugin are needed → keep plugin enabled, disable individual skills (skill-level)
+
 ```
-Session Start (hook)              Manual Commands
-       │                                │
-       ▼                                ▼
-  Detect profile ──────────►  /skill-manager (analyze)
-  Inject directives            /skill-status (view)
-       │                       /skill-toggle (edit)
-       ▼                                │
-  Claude knows which                    ▼
-  skills are disabled           .claude/skill-profile.json
+/skill-manager analyzes project
+       │
+       ├── All skills in plugin disabled? ──► enabledPlugins: false
+       │                                      (context fully removed)
+       │
+       └── Some skills still needed? ──► skill-profile.json
+                                          (soft disable via hook)
 ```
 
-1. **SessionStart hook** — A lightweight script runs at every session start. It checks for a skill profile and injects disable directives into the session context.
-2. **Analysis** — `/skill-manager` performs deep project analysis and walks you through interactive recommendations.
-3. **Configuration** — Results are saved to `.claude/skill-profile.json` in your project root.
-4. **Enforcement** — On subsequent sessions, the hook tells Claude which skills are disabled for this project.
+### Session lifecycle
+
+1. **Plugin loading** — Claude Code reads `.claude/settings.local.json` and skips disabled plugins entirely. Their skill descriptions never enter the context.
+2. **SessionStart hook** — For plugins that remain enabled, the hook injects disable directives for individual skills.
+3. **Result** — Claude only sees skills that are actually relevant to your project.
 
 ## Configuration
 
-The profile is stored at `<project-root>/.claude/skill-profile.json`:
+Two files are managed by the plugin:
+
+### `.claude/settings.local.json` — Plugin-level control
+
+```json
+{
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": false,
+    "ui-ux-pro-max@ui-ux-pro-max-skill": false
+  }
+}
+```
+
+### `.claude/skill-profile.json` — Skill-level control
 
 ```json
 {
@@ -146,24 +169,28 @@ The profile is stored at `<project-root>/.claude/skill-profile.json`:
     "superpowers:systematic-debugging"
   ],
   "disabled": [
-    "ui-ux-pro-max:ui-ux-pro-max",
-    "superpowers:design-shotgun"
+    "superpowers:design-shotgun",
+    "superpowers:canary"
+  ],
+  "disabledPlugins": [
+    "frontend-design@claude-plugins-official",
+    "ui-ux-pro-max@ui-ux-pro-max-skill"
   ],
   "conflicts": {
     "Frontend/Design": {
-      "chosen": "frontend-design:frontend-design",
-      "over": ["ui-ux-pro-max:ui-ux-pro-max"],
-      "reason": "Project uses React + Tailwind"
+      "chosen": null,
+      "over": ["frontend-design:frontend-design", "ui-ux-pro-max:ui-ux-pro-max"],
+      "reason": "Pure backend project, no frontend code"
     }
   },
   "projectContext": {
-    "techStack": ["typescript", "react", "tailwind"],
+    "techStack": ["typescript", "node", "express"],
     "analyzedAt": "2026-04-07T12:00:00.000Z"
   }
 }
 ```
 
-You can commit this file to your repo so teammates share the same skill profile.
+You can commit `skill-profile.json` to your repo so teammates share the same profile. Note that `settings.local.json` is typically gitignored (local only).
 
 ## Multilingual
 

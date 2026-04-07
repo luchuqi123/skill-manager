@@ -100,7 +100,35 @@ For conflict groups:
 
 ### Phase 5: Write Configuration
 
-After all domains are confirmed, generate `.claude/skill-profile.json`:
+After all domains are confirmed, write TWO configuration files:
+
+#### 5a. Plugin-level disabling (`.claude/settings.local.json`)
+
+This is the **primary mechanism** that actually reduces context overhead. For each installed plugin, check if ALL of its skills are in the disabled list. If so, disable the entire plugin via `enabledPlugins`.
+
+1. Read the existing `.claude/settings.local.json` (or create it).
+2. For each plugin, count how many of its skills are enabled vs disabled.
+3. If a plugin has **zero enabled skills**, set `"pluginKey": false` in `enabledPlugins`.
+4. If a plugin has **any enabled skills**, ensure it is set to `true` (or remove the entry to inherit the global default).
+5. **NEVER disable `skill-manager@skill-manager`** — the manager itself must always stay enabled.
+6. Write the updated settings file, preserving all existing fields (permissions, env, etc.).
+
+Example result in `.claude/settings.local.json`:
+```json
+{
+  "permissions": { "...existing..." },
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": false,
+    "ui-ux-pro-max@ui-ux-pro-max-skill": false
+  }
+}
+```
+
+**Important**: The plugin key format in `enabledPlugins` is `pluginName@marketplaceName` (e.g. `superpowers@claude-plugins-official`). Read `~/.claude/plugins/installed_plugins.json` to get the exact keys — they are the top-level keys in the `plugins` object.
+
+#### 5b. Skill-level profile (`.claude/skill-profile.json`)
+
+For plugins that remain enabled but have some skills disabled, write the fine-grained profile:
 
 ```json
 {
@@ -109,6 +137,7 @@ After all domains are confirmed, generate `.claude/skill-profile.json`:
   "updatedAt": "<ISO timestamp>",
   "enabled": ["plugin:skill", "..."],
   "disabled": ["plugin:skill", "..."],
+  "disabledPlugins": ["frontend-design@claude-plugins-official", "..."],
   "conflicts": {
     "<domain>": {
       "chosen": "plugin:skill",
@@ -123,13 +152,26 @@ After all domains are confirmed, generate `.claude/skill-profile.json`:
 }
 ```
 
-Create the `.claude/` directory if it doesn't exist. Write the file using the Write tool.
+The `disabledPlugins` array records which plugins were fully disabled at the `enabledPlugins` level, so `/skill-status` and `/skill-toggle` can track them.
 
-After writing, confirm to the user:
+Create the `.claude/` directory if it doesn't exist. Write both files using the Write tool.
+
+#### 5c. Confirm to user
+
+After writing, show a summary:
+
 ```
-Configuration saved to .claude/skill-profile.json
-Enabled: X skills | Disabled: Y skills
-Changes take effect on next session start.
+Configuration saved:
+
+Plugin-level (context fully removed):
+  ❌ frontend-design@claude-plugins-official  (all 1 skills disabled)
+  ❌ ui-ux-pro-max@ui-ux-pro-max-skill       (all 1 skills disabled)
+
+Skill-level (soft disable via hook):
+  💤 superpowers:canary, superpowers:design-shotgun, ...
+
+Enabled: X skills | Disabled: Y skills (Z via plugin-level, W via skill-level)
+Restart Claude Code for plugin-level changes to take effect.
 ```
 
 ## Updating Existing Profile

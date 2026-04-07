@@ -114,26 +114,49 @@ Skill Manager 通过创建项目级的 skill 配置文件来解决这个问题�
 
 ## 工作原理
 
+Skill Manager 使用**两层禁用机制**来最大化节省上下文：
+
+| 层级 | 机制 | 效果 |
+|------|------|------|
+| **插件级** | `.claude/settings.local.json` 的 `enabledPlugins` | skill 描述**完全不加载**到上下文 |
+| **Skill 级** | `.claude/skill-profile.json` + SessionStart hook | 描述仍在上下文中，但 Claude 不会使用 |
+
+`/skill-manager` 分析项目时会自动判断最优层级：
+- 如果某个插件的**所有 skill** 都不需要 → 禁用整个插件（插件级）
+- 如果某个插件的**部分 skill** 还需要 → 保留插件，禁用单个 skill（skill 级）
+
 ```
-会话启动 (hook)                  手动命令
-       │                            │
-       ▼                            ▼
-  检测配置文件 ──────────►  /skill-manager (分析)
-  注入禁用指令              /skill-status  (查看)
-       │                   /skill-toggle  (编辑)
-       ▼                            │
-  Claude 知道哪些                    ▼
-  skill 被禁用             .claude/skill-profile.json
+/skill-manager 分析项目
+       │
+       ├── 插件内所有 skill 都禁用? ──► enabledPlugins: false
+       │                                (上下文完全移除)
+       │
+       └── 部分 skill 仍需要? ──► skill-profile.json
+                                   (通过 hook 软禁用)
 ```
 
-1. **SessionStart hook** — 每次会话启动时运行轻量脚本，检测 skill 配置并注入禁用指令到会话上下文。
-2. **分析** — `/skill-manager` 对项目进行深度分析，引导你完成交互式推荐。
-3. **配置** — 结果保存到项目根目录的 `.claude/skill-profile.json`。
-4. **生效** — 后续会话中，hook 会告诉 Claude 哪些 skill 在当前项目中被禁用。
+### 会话生命周期
+
+1. **插件加载** — Claude Code 读取 `.claude/settings.local.json`，跳过被禁用的插件。它们的 skill 描述完全不会进入上下文。
+2. **SessionStart hook** — 对于仍然启用的插件，hook 注入单个 skill 的禁用指令。
+3. **结果** — Claude 只看到与当前项目真正相关的 skill。
 
 ## 配置文件
 
-配置保存在 `<项目根目录>/.claude/skill-profile.json`：
+插件管理两个配置文件：
+
+### `.claude/settings.local.json` — 插件级控制
+
+```json
+{
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": false,
+    "ui-ux-pro-max@ui-ux-pro-max-skill": false
+  }
+}
+```
+
+### `.claude/skill-profile.json` — Skill 级控制
 
 ```json
 {
@@ -146,24 +169,28 @@ Skill Manager 通过创建项目级的 skill 配置文件来解决这个问题�
     "superpowers:systematic-debugging"
   ],
   "disabled": [
-    "ui-ux-pro-max:ui-ux-pro-max",
-    "superpowers:design-shotgun"
+    "superpowers:design-shotgun",
+    "superpowers:canary"
+  ],
+  "disabledPlugins": [
+    "frontend-design@claude-plugins-official",
+    "ui-ux-pro-max@ui-ux-pro-max-skill"
   ],
   "conflicts": {
     "前端设计": {
-      "chosen": "frontend-design:frontend-design",
-      "over": ["ui-ux-pro-max:ui-ux-pro-max"],
-      "reason": "项目使用 React + Tailwind"
+      "chosen": null,
+      "over": ["frontend-design:frontend-design", "ui-ux-pro-max:ui-ux-pro-max"],
+      "reason": "纯后端项目，无前端代码"
     }
   },
   "projectContext": {
-    "techStack": ["typescript", "react", "tailwind"],
+    "techStack": ["typescript", "node", "express"],
     "analyzedAt": "2026-04-07T12:00:00.000Z"
   }
 }
 ```
 
-你可以把这个文件提交到仓库，让团队成员共享相同的 skill 配置。
+你可以把 `skill-profile.json` 提交到仓库，让团队成员共享相同的配置。注意 `settings.local.json` 通常被 gitignore（仅本地生效）。
 
 ## 多语言支持
 
