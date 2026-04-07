@@ -23,7 +23,7 @@ This skill is invoked as `/skill-toggle <action> <args>`.
 2. Verify the skill identifier exists in the installed plugins (check `~/.claude/plugins/installed_plugins.json` and walk the install path).
 3. Move the skill from `disabled` to `enabled` in the profile.
 4. If the skill was not in either list (unmanaged), add it to `enabled`.
-5. **Plugin re-enable check**: If the skill's parent plugin is currently disabled in `.claude/settings.local.json` `enabledPlugins`, re-enable it (set to `true` or remove the entry). Also remove the plugin from the profile's `disabledPlugins` array.
+5. **Plugin re-enable check**: If the skill's parent plugin is currently disabled in `.claude/settings.local.json` `enabledPlugins`, remove the `false` entry (do NOT write `true` — let it inherit the global default). Also remove the plugin from the profile's `disabledPlugins` array.
 6. Update `updatedAt` timestamp.
 7. Write the updated profile and settings.
 8. If the plugin was re-enabled: `✅ Enabled <plugin:skill>. Plugin <plugin@marketplace> was re-enabled. Restart Claude Code for full effect.`

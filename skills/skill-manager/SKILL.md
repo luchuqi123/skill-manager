@@ -109,7 +109,7 @@ This is the **primary mechanism** that actually reduces context overhead. For ea
 1. Read the existing `.claude/settings.local.json` (or create it).
 2. For each plugin, count how many of its skills are enabled vs disabled.
 3. If a plugin has **zero enabled skills**, set `"pluginKey": false` in `enabledPlugins`.
-4. If a plugin has **any enabled skills**, ensure it is set to `true` (or remove the entry to inherit the global default).
+4. If a plugin has **any enabled skills**, remove its entry from `enabledPlugins` (if present) so it inherits the global default. Do NOT write `true` — that could override a user's intentional global `false`.
 5. **NEVER disable `skill-manager@skill-manager`** — the manager itself must always stay enabled.
 6. Write the updated settings file, preserving all existing fields (permissions, env, etc.).
 
