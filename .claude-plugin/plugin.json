@@ -3,10 +3,10 @@
   "description": "Manage installed skills per-project: analyze, recommend, enable/disable skills to reduce context overhead",
   "version": "0.1.0",
   "author": {
-    "name": "luchuqi"
+    "name": "lucas-lu-ai"
   },
-  "homepage": "https://github.com/luchuqi/skill-manager",
-  "repository": "https://github.com/luchuqi/skill-manager",
+  "homepage": "https://github.com/lucas-lu-ai/skill-manager",
+  "repository": "https://github.com/lucas-lu-ai/skill-manager",
   "license": "MIT",
   "keywords": [
     "skills",

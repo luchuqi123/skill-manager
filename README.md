@@ -17,7 +17,7 @@ Inside Claude Code, run the following commands:
 **Step 1: Add the marketplace**
 
 ```
-/plugin marketplace add luchuqi123/skill-manager
+/plugin marketplace add lucas-lu-ai/skill-manager
 ```
 
 **Step 2: Install the plugin**
